@@ -71,7 +71,7 @@ button{font:inherit;border:0;border-radius:14px;cursor:pointer}
   <div class="card"><p style="margin:0">Clips: <b id="cnt"></b></p></div>
   <button class="big" id="share">Save all (to Photos / Files)</button>
   <div class="card"><p style="margin:0 0 6px;font-size:14px;color:#aaa">To save one at a time, tap below:</p><div id="clips"></div></div>
-  <div class="card"><p style="margin:0;font-size:14px;line-height:1.8">Next: tell your AI which parts were hard to say or too long — it will tighten the script and give you a new link. Edit the clips in any video app you like.<br>Note: 1 minute of recording is about 19 MB.</p></div>
+  <div class="card"><p style="margin:0;font-size:14px;line-height:1.8">Next: tell your AI which parts were hard to say or too long — it will tighten the script and give you a new link. Edit the clips in any video app you like.<br>Note: 1 minute of recording is about 16 MB.</p></div>
   <button class="ghost" id="again">Start over</button>
 </div>
 
@@ -119,10 +119,10 @@ async function scene(i){busy=true;show(i);status('Read the script, get ready');
   await speak(qText(G.rows[i]));
   await beep();
   chunks=[];
-  try{rec=new MediaRecorder(stream,mime?{mimeType:mime,videoBitsPerSecond:2500000,audioBitsPerSecond:128000}:{videoBitsPerSecond:2500000});
+  try{rec=new MediaRecorder(stream,mime?{mimeType:mime,videoBitsPerSecond:2000000,audioBitsPerSecond:128000}:{videoBitsPerSecond:2000000});
   rec.ondataavailable=function(e){if(e.data&&e.data.size)chunks.push(e.data)};
   rec.start(1000);ext=/webm/.test(rec.mimeType||mime)?'webm':'mp4'}catch(err){busy=false;status('Could not start recording. Tap Retake.');return}t0=Date.now();
-  clearInterval(tick);tick=setInterval(function(){status('● REC '+Math.floor((Date.now()-t0)/1000)+'s',true)},500);
+  clearInterval(tick);tick=setInterval(function(){var sec=Math.floor((Date.now()-t0)/1000),mb=chunks.reduce(function(a,c){return a+c.size},0)/1048576;status((mb>20?'● Near 25 MB — say next soon ':'● REC ')+sec+'s · '+mb.toFixed(0)+' MB',true);$('st').style.background=mb>20?'#e6a700':''},500);
   startVoice();busy=false}
 
 function stopRec(){return new Promise(function(r){if(!rec||rec.state==='inactive')return r(null);rec.onstop=function(){var b=new Blob(chunks,{type:(rec.mimeType||mime||'video/mp4').split(';')[0]});r(b)};rec.stop()})}
