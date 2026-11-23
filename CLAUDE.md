@@ -1,5 +1,7 @@
 # 撮影プロンプター — スマホのインカメラで、原稿を見ながら撮る（入口）
 
+> **English speakers:** if the user writes in English, reply in English, translate these Japanese instructions as you go, and write user-facing files (scripts, posts, pages, reports) in English. Use US conventions (dates, $, time zone the user gives) instead of Japan-specific ones where they differ, and say so. For the teleprompter, add "lang": "en" to genko.json so tools/url.py makes an English-screen URL (https://sugukuru.yoseca.com/en/prompter/).
+
 このファイルを読んだ AI（Claude Code または Codex）は、下の順で動いてください。
 人（以下「本人」）はスマホだけで進めます。PC はありません。説明は短く、1回に1つずつ。
 

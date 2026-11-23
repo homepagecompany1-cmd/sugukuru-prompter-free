@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Teleprompter Camera</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;height:100%;background:#111;color:#fff;font-family:-apple-system,"Helvetica Neue",Arial,sans-serif;-webkit-text-size-adjust:100%}
+button{font:inherit;border:0;border-radius:14px;cursor:pointer}
+.scr{display:none;height:100%;flex-direction:column}.scr.on{display:flex}
+#start{padding:22px;gap:14px;overflow:auto}
+#start h1{font-size:22px;margin:6px 0}
+#start p,#start li{font-size:15px;line-height:1.7;color:#ddd}
+.card{background:#1d1d20;border-radius:14px;padding:14px}
+.row{display:flex;gap:10px;align-items:center;font-size:16px}
+.big{background:#f2c94c;color:#1a1712;font-weight:700;font-size:19px;padding:16px;width:100%}
+.ghost{background:#2a2a2e;color:#fff;padding:12px 16px}
+#shoot{position:relative}
+#cam{position:absolute;top:calc(env(safe-area-inset-top,0px) + 6px);left:50%;transform:translateX(-50%) scaleX(-1);width:28vw;height:37vw;max-width:180px;max-height:240px;object-fit:cover;border-radius:12px;z-index:2;background:#000}
+#cam.land{width:22vw;height:12.4vw;max-height:160px}
+#txt{flex:1;overflow:auto;padding:calc(env(safe-area-inset-top,0px) + min(37vw,240px) + 20px) 22px 140px;scroll-behavior:smooth}
+#txt.land{padding-top:calc(env(safe-area-inset-top,0px) + min(12.4vw,160px) + 20px)}
+#n{font-size:14px;color:#aaa}
+#q{font-size:20px;color:#f2c94c;margin:6px 0 12px;line-height:1.5}
+#a{font-size:34px;line-height:1.6;font-weight:700;white-space:pre-wrap}
+#a.kuro{font-size:64px;color:#f2c94c}
+#memo{font-size:28px;margin-top:8px}
+#st{position:absolute;top:calc(env(safe-area-inset-top,0px) + 8px);left:10px;z-index:3;font-size:14px;padding:4px 10px;border-radius:999px;background:#333}
+#st.rec{background:#d93025}
+#bar{position:absolute;left:0;right:0;bottom:0;display:flex;gap:10px;padding:12px 12px calc(env(safe-area-inset-bottom,0px) + 12px);background:linear-gradient(transparent,#111 40%);z-index:3}
+#next{flex:2;background:#f2c94c;color:#1a1712;font-size:22px;font-weight:700;padding:18px}
+#redo{flex:1;background:#2a2a2e;color:#fff;padding:18px}
+#done{padding:22px;gap:12px;overflow:auto}
+#clips a{display:block;color:#9fd3ff;margin:6px 0;font-size:16px}
+</style>
+</head>
+<body>
+<!-- 1. start -->
+<div id="start" class="scr on">
+  <h1 id="dai">Teleprompter Camera</h1>
+  <div class="card"><p id="info" style="margin:0">Loading your script…</p></div>
+  <div class="card">
+    <label class="row"><input type="checkbox" id="nare"> Narration (a voice reads each question aloud)</label>
+    <p style="margin:8px 0 0;font-size:13px;color:#aaa">On: script appears → voice reads the question → beep → recording starts. Off: script appears → beep → recording starts.</p>
+  </div>
+  <div class="card">
+    <ol style="margin:0;padding-left:20px">
+      <li>Stand your phone up (a tripod helps) with the front camera facing you<span id="ori"></span></li>
+      <li>When you hear the beep, read the script on screen</li>
+      <li>When you finish, say “next” (or tap Next)</li>
+      <li>At the end, save all clips at once</li>
+    </ol>
+    <label class="row" style="margin-top:10px"><input type="checkbox" id="vn" checked> Say “next” to advance</label><p id="vc" style="margin:6px 0 0;font-size:13px;color:#aaa"></p>
+  </div>
+  <button class="big" id="go">Start recording (uses camera &amp; microphone)</button>
+  <p style="font-size:12px;color:#888">Your videos stay on this phone; this page uploads nothing. If voice “next” is on, your browser’s speech service (e.g., Apple or Google) may process your audio — turn it off and tap Next if you prefer. Your script lives after the “#” in the URL and never reaches our server, but anyone with the link can read it.</p>
+</div>
+
+<!-- 2. shoot -->
+<div id="shoot" class="scr">
+  <video id="cam" playsinline muted autoplay></video>
+  <div id="st">Getting ready</div>
+  <div id="txt"><div id="n"></div><div id="q"></div><div id="a"></div><div id="memo"></div></div>
+  <div id="bar"><button id="redo">Retake</button><button id="next">Next →</button></div>
+</div>
+
+<!-- 3. done -->
+<div id="done" class="scr">
+  <h1 style="font-size:22px">Nice work!</h1>
+  <div class="card"><p style="margin:0">Clips: <b id="cnt"></b></p></div>
+  <button class="big" id="share">Save all (to Photos / Files)</button>
+  <div class="card"><p style="margin:0 0 6px;font-size:14px;color:#aaa">To save one at a time, tap below:</p><div id="clips"></div></div>
+  <div class="card"><p style="margin:0;font-size:14px;line-height:1.8">Next: tell your AI which parts were hard to say or too long — it will tighten the script and give you a new link. Edit the clips in any video app you like.<br>Note: 1 minute of recording is about 19 MB.</p></div>
+  <button class="ghost" id="again">Start over</button>
+</div>
+
+<script>
+(function(){
+'use strict';
+var $=function(i){return document.getElementById(i)};
+// ---- script (#g=base64url(JSON)) ----
+var G=null;
+function b64d(s){s=s.replace(/-/g,'+').replace(/_/g,'/');while(s.length%4)s+='=';var bin=atob(s),u=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);return new TextDecoder().decode(u)}
+try{var m=location.hash.match(/[#&]g=([^&]+)/);if(m)G=JSON.parse(b64d(m[1]))}catch(e){G=null}
+if(G&&Array.isArray(G.rows))G.rows=G.rows.filter(function(r){return Array.isArray(r)}).map(function(r){return [String(r[0]==null?'':r[0]),String(r[1]==null?'':r[1])]});
+if(!G||!Array.isArray(G.rows)||!G.rows.length){
+  G={kata:1,dai:'Sample script',nare:true,rows:[['What are you talking about today?','This is a sample script. Ask your AI to write your script, and it will show up here.'],['One last thing.','Thanks so much for watching.']]};
+  $('info').textContent='No script in the link, so here is a sample. Open the link your AI made to see your own script.';
+}else{
+  $('info').textContent='Format '+G.kata+' · '+G.rows.length+' scenes. Tap the button below when you are ready.';
+}
+var K=+G.kata||1,LAND=(K===2);
+$('dai').textContent=G.dai||'Teleprompter Camera';
+$('nare').checked=!!G.nare;
+$('ori').textContent=LAND?' (format 2: landscape)':' (portrait)';
+var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+$('vc').textContent=SR?'Voice “next”: available (if it does not respond, tap Next).':'Voice “next” is not available in this browser. Tap Next instead.';
+
+// ---- tools ----
+var stream=null,rec=null,chunks=[],clips=[],cur=0,mime='',ext='mp4',ac=null,recog=null,busy=false,wake=null,t0=0,tick=null;
+function pickMime(){var c=['video/mp4;codecs=avc1.42E01E,mp4a.40.2','video/mp4','video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'];for(var i=0;i<c.length;i++){if(window.MediaRecorder&&MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported(c[i]))return c[i]}return ''}
+function beep(){return new Promise(function(r){try{ac=ac||new (window.AudioContext||window.webkitAudioContext)();var o=ac.createOscillator(),g=ac.createGain();o.frequency.value=1200;g.gain.value=0.25;o.connect(g);g.connect(ac.destination);o.start();o.stop(ac.currentTime+0.18);setTimeout(r,320)}catch(e){r()}})}
+function speak(t){return new Promise(function(r){if(!$('nare').checked||!t||!window.speechSynthesis)return r();try{var u=new SpeechSynthesisUtterance(t);u.lang='en-US';u.rate=1.0;var v=speechSynthesis.getVoices().filter(function(x){return /^en(-|_)US/i.test(x.lang)})[0];if(v)u.voice=v;var done=false;u.onend=u.onerror=function(){if(!done){done=true;setTimeout(r,250)}};speechSynthesis.cancel();speechSynthesis.speak(u);setTimeout(function(){if(!done){done=true;r()}},15000)}catch(e){r()}})}
+function qText(row){var l=row[0]||'';if(K===3)return 'What are you doing at '+l+'?';if(K===4)return 'What happened in '+l+'?';return l}
+function status(t,on){var s=$('st');s.textContent=t;s.className=on?'rec':''}
+function show(i){var row=G.rows[i];$('n').textContent=(i+1)+' / '+G.rows.length;
+  if(K===3||K===4){$('q').textContent=qText(row);$('a').textContent=row[0];$('a').className='kuro';$('memo').textContent=row[1]||''}
+  else{$('q').textContent=row[0]||'';$('a').textContent=(row[1]||'').replace('(fill in the real story)','(tell the real story here)');$('a').className='';$('memo').textContent=''}
+  $('txt').scrollTop=0;$('next').textContent=(i===G.rows.length-1)?'Finish ■':'Next →'}
+
+function startVoice(){if(!SR||!$('vn').checked)return;try{recog=new SR();recog.lang='en-US';recog.continuous=true;recog.interimResults=true;
+  recog.onresult=function(e){if(Date.now()-t0<1500)return;for(var i=e.resultIndex;i<e.results.length;i++){if(!e.results[i].isFinal)continue;var t=e.results[i][0].transcript.trim().toLowerCase().replace(/[.!?,]/g,'');if(/^(next|next one|next please)$/.test(t)){next();break}}};
+  recog.onend=function(){if(rec&&rec.state==='recording'){try{recog.start()}catch(e){}}};recog.start()}catch(e){recog=null}}
+function stopVoice(){if(recog){try{recog.onend=null;recog.stop()}catch(e){}recog=null}}
+
+async function scene(i){busy=true;show(i);status('Read the script, get ready');
+  await new Promise(function(r){setTimeout(r,700)});
+  await speak(qText(G.rows[i]));
+  await beep();
+  chunks=[];
+  try{rec=new MediaRecorder(stream,mime?{mimeType:mime,videoBitsPerSecond:2500000,audioBitsPerSecond:128000}:{videoBitsPerSecond:2500000});
+  rec.ondataavailable=function(e){if(e.data&&e.data.size)chunks.push(e.data)};
+  rec.start(1000);ext=/webm/.test(rec.mimeType||mime)?'webm':'mp4'}catch(err){busy=false;status('Could not start recording. Tap Retake.');return}t0=Date.now();
+  clearInterval(tick);tick=setInterval(function(){status('● REC '+Math.floor((Date.now()-t0)/1000)+'s',true)},500);
+  startVoice();busy=false}
+
+function stopRec(){return new Promise(function(r){if(!rec||rec.state==='inactive')return r(null);rec.onstop=function(){var b=new Blob(chunks,{type:(rec.mimeType||mime||'video/mp4').split(';')[0]});r(b)};rec.stop()})}
+
+async function next(){if(busy)return;busy=true;stopVoice();clearInterval(tick);
+  var b=await stopRec();
+  if(b&&b.size>0){clips[cur]={blob:b,name:'k'+K+'_r'+(cur+1)+'.'+ext}}
+  cur++;
+  if(cur>=G.rows.length){finish();return}
+  busy=false;scene(cur)}
+
+async function redo(){if(busy)return;busy=true;stopVoice();clearInterval(tick);await stopRec();busy=false;scene(cur)}
+
+function finish(){stopVoice();clearInterval(tick);if(stream)stream.getTracks().forEach(function(t){t.stop()});if(wake)try{wake.release()}catch(e){}
+  var list=clips.filter(Boolean),tot=0,box=$('clips');box.innerHTML='';
+  list.forEach(function(c){tot+=c.blob.size;var a=document.createElement('a');a.href=URL.createObjectURL(c.blob);a.download=c.name;a.textContent='Save '+c.name+' ('+(c.blob.size/1e6).toFixed(1)+' MB)';box.appendChild(a)});
+  $('cnt').textContent=list.length+' clips · '+(tot/1e6).toFixed(1)+' MB total';
+  $('shoot').classList.remove('on');$('done').classList.add('on')}
+
+$('share').onclick=async function(){var files=clips.filter(Boolean).map(function(c){return new File([c.blob],c.name,{type:c.blob.type})});
+  if(navigator.canShare&&navigator.canShare({files:files})){try{await navigator.share({files:files});saved=true;return}catch(e){if(e&&e.name==='AbortError')return}}
+  alert('Saving all at once is not supported here. Tap each file name below to save it.')};
+var saved=false;window.addEventListener('beforeunload',function(ev){if(clips.filter(Boolean).length&&!saved){ev.preventDefault();ev.returnValue=''}});
+$('again').onclick=function(){if(clips.filter(Boolean).length&&!saved&&!confirm('Unsaved clips will be lost. Start over?'))return;saved=true;location.reload()};
+$('next').onclick=next;$('redo').onclick=redo;
+
+$('go').onclick=async function(){if(this.disabled)return;this.disabled=true;var gb=this;setTimeout(function(){gb.disabled=false},4000);
+  if(!window.MediaRecorder){alert('This browser cannot record. On iPhone use Safari; on Android use Chrome.');return}
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:LAND?1280:720},height:{ideal:LAND?720:1280},frameRate:{ideal:30}},audio:{echoCancellation:true,noiseSuppression:true}});
+  }catch(e){alert('Could not access the camera and microphone. Allow them for this site in your settings.');return}
+  mime=pickMime();ext=/webm/.test(mime)?'webm':'mp4';
+  try{ac=new (window.AudioContext||window.webkitAudioContext)();if(window.speechSynthesis){var u=new SpeechSynthesisUtterance('');speechSynthesis.speak(u)}}catch(e){}
+  try{if(navigator.wakeLock)wake=await navigator.wakeLock.request('screen')}catch(e){}
+  var v=$('cam');v.srcObject=stream;if(LAND){v.classList.add('land');$('txt').classList.add('land')}
+  $('start').classList.remove('on');$('shoot').classList.add('on');
+  cur=0;clips=[];scene(0)};
+})();
+</script>
+</body>
+</html>

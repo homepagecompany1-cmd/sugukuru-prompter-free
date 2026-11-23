@@ -51,10 +51,10 @@ button{font:inherit;border:0;border-radius:14px;cursor:pointer}
       <li>読み終えたら「次」と言う（または下の「次」を押す）</li>
       <li>最後まで行ったら、まとめて保存する</li>
     </ol>
-    <p id="vc" style="margin:8px 0 0;font-size:13px;color:#aaa"></p>
+    <label class="row" style="margin-top:10px"><input type="checkbox" id="vn" checked> 声の「次」で進む</label><p id="vc" style="margin:6px 0 0;font-size:13px;color:#aaa"></p>
   </div>
   <button class="big" id="go">撮影をはじめる（カメラとマイクを使います）</button>
-  <p style="font-size:12px;color:#888">撮った動画はこのスマホの中だけに残ります（どこにも送りません）。原稿はURLの「#」より後ろに入っていて、サーバーには届きません。</p>
+  <p style="font-size:12px;color:#888">撮った動画はこのスマホの中だけに残り、このページからはどこにも送りません。ただし声の「次」をオンにすると、聞き取りのために音声がブラウザの会社（Apple・Google など）の仕組みで処理されることがあります。気になる時はオフにして画面の「次」を押してください。原稿は URL の「#」より後ろに入っていてサーバーには届きませんが、URL を知っている人は原稿を見られます。</p>
 </div>
 
 <!-- 2. 撮影の画面 -->
@@ -71,7 +71,7 @@ button{font:inherit;border:0;border-radius:14px;cursor:pointer}
   <div class="card"><p style="margin:0">撮った動画：<b id="cnt"></b></p></div>
   <button class="big" id="share">まとめて保存（写真・ファイルへ）</button>
   <div class="card"><p style="margin:0 0 6px;font-size:14px;color:#aaa">1本ずつ保存する時は、下を押す：</p><div id="clips"></div></div>
-  <div class="card"><p style="margin:0;font-size:14px;line-height:1.8">次は：GitHub の自分のリポを開く → <b>inbox</b> フォルダ → <b>Add file → Upload files</b> → 保存した動画を選ぶ → <b>Commit changes</b>。そのあと AI に「inbox に入れた。仕上げて」と送る。<br>※1本 25MB まで（この画面の録画は 1分で約19MB）。</p></div>
+  <div class="card"><p style="margin:0;font-size:14px;line-height:1.8">撮影はここで完了です。AI に「言いにくかった所・長かった場面」を伝えると、原稿を直した新しい URL をくれます。<br>字幕や見出しをつけて仕上げたい人は、無料の「動画の型1〜4」キットの <b>inbox</b> に動画を入れて「仕上げて」と送ります（1本 25MB まで・この画面の録画は 1分で約19MB）。</p></div>
   <button class="ghost" id="again">はじめから撮り直す</button>
 </div>
 
@@ -83,7 +83,8 @@ var $=function(i){return document.getElementById(i)};
 var G=null;
 function b64d(s){s=s.replace(/-/g,'+').replace(/_/g,'/');while(s.length%4)s+='=';var bin=atob(s),u=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);return new TextDecoder().decode(u)}
 try{var m=location.hash.match(/[#&]g=([^&]+)/);if(m)G=JSON.parse(b64d(m[1]))}catch(e){G=null}
-if(!G||!G.rows||!G.rows.length){
+if(G&&Array.isArray(G.rows))G.rows=G.rows.filter(function(r){return Array.isArray(r)}).map(function(r){return [String(r[0]==null?'':r[0]),String(r[1]==null?'':r[1])]});
+if(!G||!Array.isArray(G.rows)||!G.rows.length){
   G={kata:1,dai:'お試しの原稿',nare:true,rows:[['きょうは、どんな話ですか？','これはお試しの原稿です。AI に原稿を作ってもらうと、ここに自分の原稿が出ます。'],['最後にひとこと。','見てくれて、ありがとうございました。']]};
   $('info').textContent='原稿が入っていないので、お試しの原稿を出しています。AI が作った URL から開くと、自分の原稿が出ます。';
 }else{
@@ -108,8 +109,8 @@ function show(i){var row=G.rows[i];$('n').textContent=(i+1)+' / '+G.rows.length;
   else{$('q').textContent=row[0]||'';$('a').textContent=(row[1]||'').replace('（ここは実際のことを）','（ここは実際のことを話す）');$('a').className='';$('memo').textContent=''}
   $('txt').scrollTop=0;$('next').textContent=(i===G.rows.length-1)?'おわり ■':'次 →'}
 
-function startVoice(){if(!SR)return;try{recog=new SR();recog.lang='ja-JP';recog.continuous=true;recog.interimResults=true;
-  recog.onresult=function(e){for(var i=e.resultIndex;i<e.results.length;i++){var t=e.results[i][0].transcript;if(/次|つぎ|ツギ/.test(t)){next();break}}};
+function startVoice(){if(!SR||!$('vn').checked)return;try{recog=new SR();recog.lang='ja-JP';recog.continuous=true;recog.interimResults=true;
+  recog.onresult=function(e){if(Date.now()-t0<1500)return;for(var i=e.resultIndex;i<e.results.length;i++){if(!e.results[i].isFinal)continue;var t=e.results[i][0].transcript.replace(/[\s。、.!！?？]/g,'');if(/^(次|つぎ|ツギ)(へ|です)?$/.test(t)||/(次|つぎ)$/.test(t)&&t.length<=4){next();break}}};
   recog.onend=function(){if(rec&&rec.state==='recording'){try{recog.start()}catch(e){}}};recog.start()}catch(e){recog=null}}
 function stopVoice(){if(recog){try{recog.onend=null;recog.stop()}catch(e){}recog=null}}
 
@@ -118,9 +119,9 @@ async function scene(i){busy=true;show(i);status('原稿を見て、準備');
   await speak(qText(G.rows[i]));
   await beep();
   chunks=[];
-  rec=new MediaRecorder(stream,mime?{mimeType:mime,videoBitsPerSecond:2500000,audioBitsPerSecond:128000}:{videoBitsPerSecond:2500000});
+  try{rec=new MediaRecorder(stream,mime?{mimeType:mime,videoBitsPerSecond:2500000,audioBitsPerSecond:128000}:{videoBitsPerSecond:2500000});
   rec.ondataavailable=function(e){if(e.data&&e.data.size)chunks.push(e.data)};
-  rec.start(1000);t0=Date.now();
+  rec.start(1000);ext=/webm/.test(rec.mimeType||mime)?'webm':'mp4'}catch(err){busy=false;status('録画を始められませんでした。「撮り直す」を押してください');return}t0=Date.now();
   clearInterval(tick);tick=setInterval(function(){status('● 撮影中 '+Math.floor((Date.now()-t0)/1000)+'秒',true)},500);
   startVoice();busy=false}
 
@@ -142,12 +143,13 @@ function finish(){stopVoice();clearInterval(tick);if(stream)stream.getTracks().f
   $('shoot').classList.remove('on');$('done').classList.add('on')}
 
 $('share').onclick=async function(){var files=clips.filter(Boolean).map(function(c){return new File([c.blob],c.name,{type:c.blob.type})});
-  if(navigator.canShare&&navigator.canShare({files:files})){try{await navigator.share({files:files});return}catch(e){if(e&&e.name==='AbortError')return}}
+  if(navigator.canShare&&navigator.canShare({files:files})){try{await navigator.share({files:files});saved=true;return}catch(e){if(e&&e.name==='AbortError')return}}
   alert('まとめて保存ができないので、下の名前を1本ずつ押して保存してください。')};
-$('again').onclick=function(){location.reload()};
+var saved=false;window.addEventListener('beforeunload',function(ev){if(clips.filter(Boolean).length&&!saved){ev.preventDefault();ev.returnValue=''}});
+$('again').onclick=function(){if(clips.filter(Boolean).length&&!saved&&!confirm('保存していない動画は消えます。はじめから撮り直しますか？'))return;saved=true;location.reload()};
 $('next').onclick=next;$('redo').onclick=redo;
 
-$('go').onclick=async function(){
+$('go').onclick=async function(){if(this.disabled)return;this.disabled=true;var gb=this;setTimeout(function(){gb.disabled=false},4000);
   if(!window.MediaRecorder){alert('このブラウザでは録画できません。iPhone は Safari、Android は Chrome で開いてください。');return}
   try{
     stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:LAND?1280:720},height:{ideal:LAND?720:1280},frameRate:{ideal:30}},audio:{echoCancellation:true,noiseSuppression:true}});
