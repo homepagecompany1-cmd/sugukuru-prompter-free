@@ -98,7 +98,7 @@ var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
 $('vc').textContent=SR?'Voice “next”: available (if it does not respond, tap Next).':'Voice “next” is not available in this browser. Tap Next instead.';
 
 // ---- tools ----
-var stream=null,rec=null,chunks=[],clips=[],cur=0,mime='',ext='mp4',ac=null,recog=null,busy=false,wake=null,t0=0,tick=null;
+var recErr=false,stream=null,rec=null,chunks=[],clips=[],cur=0,mime='',ext='mp4',ac=null,recog=null,busy=false,wake=null,t0=0,tick=null;
 function pickMime(){var c=['video/mp4;codecs=avc1.42E01E,mp4a.40.2','video/mp4','video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'];for(var i=0;i<c.length;i++){if(window.MediaRecorder&&MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported(c[i]))return c[i]}return ''}
 function beep(){return new Promise(function(r){try{ac=ac||new (window.AudioContext||window.webkitAudioContext)();var o=ac.createOscillator(),g=ac.createGain();o.frequency.value=1200;g.gain.value=0.25;o.connect(g);g.connect(ac.destination);o.start();o.stop(ac.currentTime+0.18);setTimeout(r,320)}catch(e){r()}})}
 function speak(t){return new Promise(function(r){if(!$('nare').checked||!t||!window.speechSynthesis)return r();try{var u=new SpeechSynthesisUtterance(t);u.lang='en-US';u.rate=1.0;var v=speechSynthesis.getVoices().filter(function(x){return /^en(-|_)US/i.test(x.lang)})[0];if(v)u.voice=v;var done=false;u.onend=u.onerror=function(){if(!done){done=true;setTimeout(r,250)}};speechSynthesis.cancel();speechSynthesis.speak(u);setTimeout(function(){if(!done){done=true;r()}},15000)}catch(e){r()}})}
@@ -121,20 +121,22 @@ async function scene(i){busy=true;show(i);status('Read the script, get ready');
   chunks=[];
   try{rec=new MediaRecorder(stream,mime?{mimeType:mime,videoBitsPerSecond:2000000,audioBitsPerSecond:128000}:{videoBitsPerSecond:2000000});
   rec.ondataavailable=function(e){if(e.data&&e.data.size)chunks.push(e.data)};
-  rec.start(1000);ext=/webm/.test(rec.mimeType||mime)?'webm':'mp4'}catch(err){busy=false;status('Could not start recording. Tap Retake.');return}t0=Date.now();
+  rec.onerror=function(){recErr=true;stopVoice();clearInterval(tick);status('Recording stopped unexpectedly. Tap Retake for this scene.');$('st').style.background='#d93025'};
+  recErr=false;rec.start(1000);ext=/webm/.test(rec.mimeType||mime)?'webm':'mp4'}catch(err){busy=false;status('Could not start recording. Tap Retake.');return}t0=Date.now();
   clearInterval(tick);tick=setInterval(function(){var sec=Math.floor((Date.now()-t0)/1000),mb=chunks.reduce(function(a,c){return a+c.size},0)/1048576;status((mb>20?'● Near 25 MB — say next soon ':'● REC ')+sec+'s · '+mb.toFixed(0)+' MB',true);$('st').style.background=mb>20?'#e6a700':''},500);
   startVoice();busy=false}
 
 function stopRec(){return new Promise(function(r){if(!rec||rec.state==='inactive')return r(null);rec.onstop=function(){var b=new Blob(chunks,{type:(rec.mimeType||mime||'video/mp4').split(';')[0]});r(b)};rec.stop()})}
 
-async function next(){if(busy)return;busy=true;stopVoice();clearInterval(tick);
+async function next(){if(busy)return;if(recErr){status('Recording stopped unexpectedly. Tap Retake for this scene.');return}busy=true;stopVoice();clearInterval(tick);
   var b=await stopRec();
+  if(!b||!b.size){busy=false;status('Nothing was recorded. Tap Retake.');return}
   if(b&&b.size>0){clips[cur]={blob:b,name:'k'+K+'_r'+(cur+1)+'.'+ext}}
   cur++;
   if(cur>=G.rows.length){finish();return}
   busy=false;scene(cur)}
 
-async function redo(){if(busy)return;busy=true;stopVoice();clearInterval(tick);await stopRec();busy=false;scene(cur)}
+async function redo(){if(busy)return;busy=true;recErr=false;stopVoice();clearInterval(tick);await stopRec();busy=false;scene(cur)}
 
 function finish(){stopVoice();clearInterval(tick);if(stream)stream.getTracks().forEach(function(t){t.stop()});if(wake)try{wake.release()}catch(e){}
   var list=clips.filter(Boolean),tot=0,box=$('clips');box.innerHTML='';
@@ -145,7 +147,7 @@ function finish(){stopVoice();clearInterval(tick);if(stream)stream.getTracks().f
 $('share').onclick=async function(){var files=clips.filter(Boolean).map(function(c){return new File([c.blob],c.name,{type:c.blob.type})});
   if(navigator.canShare&&navigator.canShare({files:files})){try{await navigator.share({files:files});saved=true;return}catch(e){if(e&&e.name==='AbortError')return}}
   alert('Saving all at once is not supported here. Tap each file name below to save it.')};
-var saved=false;window.addEventListener('beforeunload',function(ev){if(clips.filter(Boolean).length&&!saved){ev.preventDefault();ev.returnValue=''}});
+var saved=false;window.addEventListener('beforeunload',function(ev){if((clips.filter(Boolean).length||(rec&&rec.state==='recording'))&&!saved){ev.preventDefault();ev.returnValue=''}});
 $('again').onclick=function(){if(clips.filter(Boolean).length&&!saved&&!confirm('Unsaved clips will be lost. Start over?'))return;saved=true;location.reload()};
 $('next').onclick=next;$('redo').onclick=redo;
 
